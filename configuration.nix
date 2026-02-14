@@ -163,7 +163,7 @@
     bind
     htop
     pkgs.usbutils
-    python3Full
+    python315
     jdk21_headless
     unzip
   #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
@@ -177,13 +177,6 @@
       package = pkgs.qemu_kvm;
       runAsRoot = true;
       swtpm.enable = true;
-      ovmf = {
-        enable = true;
-        packages = [(pkgs.OVMF.override {
-          secureBoot = true;
-          tpmSupport = true;
-        }).fd];
-      };
     };
   };
 
