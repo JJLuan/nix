@@ -196,6 +196,16 @@
   #qemu guest agent
   services.qemuGuest.enable = true;
 
+  #udev automation to hand off z-wave dongle
+  services.udev.extraRules = ''
+    ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55d4", \
+    RUN+="${pkgs.writeShellScript "zwave-hotplug" ''
+      ${pkgs.libvirt}/bin/virsh --connect qemu:///system detach-device haos /var/lib/libvirt/zwave_dongle.xml --live 2>/dev/null
+      sleep 2
+      ${pkgs.libvirt}/bin/virsh --connect qemu:///system attach-device haos /var/lib/libvirt/zwave_dongle.xml --live
+    ''}"
+  '';
+
   # Open ports in the firewall.
   # networking.firewall.allowedTCPPorts = [ ... ];
   # networking.firewall.allowedUDPPorts = [ ... ];
