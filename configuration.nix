@@ -3,7 +3,23 @@
 # and in the NixOS manual (accessible by running ‘nixos-help’).
 
 { config, pkgs, ... }:
-  
+let 
+  zwaveXml = pkgs.writeText "zwave_dongle.xml" ''
+    <hostdev mode='subsystem' type='usb' managed='yes'>
+      <source>
+        <vendor id='0x1a86'/>
+        <product id='0x55d4'/>
+      </source>
+    </hostdev>
+  '';
+
+  zwaveAttachScript = pkgs.writeShellScript "zwave-attach" ''
+    # Silence errors during detach in case the ghost doesn't exist
+    ${pkgs.libvirt}/bin/virsh --connect qemu:///system detach-device haos ${zwaveXml} --live 2>/dev/null
+    ${pkgs.coreutils}/bin/sleep 2
+    ${pkgs.libvirt}/bin/virsh --connect qemu:///system attach-device haos ${zwaveXml} --live 
+  '';
+in
 {
   imports =
     [ # Include the results of the hardware scan.
@@ -166,7 +182,7 @@
     python315
     jdk21_headless
     unzip
-  #  vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
+    #vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
   #  wget
   ];
 
@@ -179,6 +195,63 @@
       swtpm.enable = true;
     };
   };
+
+  virtualisation.podman.enable=true;
+
+  systemd.services.create-ts-network = {
+    serviceConfig.Type = "oneshot";
+    wantedBy = [ "podman-newt.service" "podman-teamspeak6-server.service" ];
+    script = ''
+      ${pkgs.podman}/bin/podman network exists ts_bridge || \
+      ${pkgs.podman}/bin/podman network create ts_bridge
+    '';
+  };
+
+  virtualisation.oci-containers = {
+    backend="podman";
+    containers ={
+      "teamspeak6-server" = {
+        image = "teamspeaksystems/teamspeak6-server:latest";
+        
+        # Ports: Note the /udp suffix for the voice port
+        ports = [
+          "9987:9987/udp"   # Voice
+          "30033:30033/tcp" # File Transfer
+          #"10080:10080/tcp" #Web Query
+        ];
+
+        # Environment variables
+        environment = {
+          TSSERVER_LICENSE_ACCEPTED = "accept";
+        };
+
+        # Volumes: Mapping a host path to the container path
+        volumes = [
+          "/var/lib/teamspeak:/var/tsserver"
+        ];
+
+        # Equivalent to 'unless-stopped' in the systemd context
+        autoStart = true;
+        extraOptions = ["--network=ts_bridge"];
+      };
+
+      newt = {
+        image = "fosrl/newt:latest";
+        volumes = ["/var/run/podman/podman.sock:/var/run/docker.sock:ro"];
+        environment = {
+          PANGOLIN_ENDPOINT = "https://pangolin.chocomintpie.com";
+          NEWT_ID = "c4ubk9q7ywe2ncf";
+          NEWT_SECRET = "f5kf5up0mg74xj919qmony1djnq2qrkr73fyq3nvsnted9aw";
+        };
+        extraOptions = ["--network=ts_bridge"];
+        dependsOn = ["teamspeak6-server"];
+      };
+    };
+  };
+
+  systemd.tmpfiles.rules = [
+    "d /var/lib/teamspeak 0755 9987 9987 -"
+  ];
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
@@ -197,13 +270,22 @@
   services.qemuGuest.enable = true;
 
   #udev automation to hand off z-wave dongle
+  environment.etc."libvirt/hooks/qemu" = {
+    mode = "0755"; # This sets the file as executable (rwxr-xr-x)
+    text = ''
+      #!/run/current-system/sw/bin/bash
+      GUEST_NAME="$1"
+      OPERATION="$2"
+
+      if [ "$GUEST_NAME" == "haos" ] && [ "$OPERATION" == "started" ]; then
+          ${zwaveAttachScript}
+      fi
+    '';
+  };
+
   services.udev.extraRules = ''
     ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55d4", \
-    RUN+="${pkgs.writeShellScript "zwave-hotplug" ''
-      ${pkgs.libvirt}/bin/virsh --connect qemu:///system detach-device haos /var/lib/libvirt/zwave_dongle.xml --live 2>/dev/null
-      sleep 2
-      ${pkgs.libvirt}/bin/virsh --connect qemu:///system attach-device haos /var/lib/libvirt/zwave_dongle.xml --live
-    ''}"
+    RUN+="${zwaveAttachScript}"
   '';
 
   # Open ports in the firewall.
