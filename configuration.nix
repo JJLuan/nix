@@ -44,10 +44,7 @@ in
       vlan10 = {id=10; interface="enp1s0"; };
     };
 
-    defaultGateway.address = "192.168.1.1";
-    defaultGateway.interface = "br0";
-
-    interfaces.enp1s0.useDHCP = true;
+    interfaces.enp1s0.useDHCP = false;
 
     bridges.br0.interfaces = ["enp1s0"];
     interfaces.br0 = {
