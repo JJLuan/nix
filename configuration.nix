@@ -20,10 +20,12 @@ let
     ${pkgs.libvirt}/bin/virsh --connect qemu:///system attach-device haos ${zwaveXml} --live 
   '';
 in
-{
-  imports =
-    [ # Include the results of the hardware scan.
+  {
+    imports =
+      [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
+      ./networking.nix
+      ./teamspeak.nix
     ];
 
   # flakes
@@ -32,40 +34,6 @@ in
   # Bootloader.
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
-
-  networking = {
-    hostId = "cafef00d";
-    hostName = "nixos"; # Define your hostname.
-    useDHCP = false;
-
-
-    vlans = {
-      # IOT VLAN
-      vlan10 = {id=10; interface="enp1s0"; };
-    };
-
-    interfaces.enp1s0.useDHCP = false;
-
-    bridges.br0.interfaces = ["enp1s0"];
-    interfaces.br0 = {
-      useDHCP = true;
-    };
-
-    interfaces.vlan10.useDHCP = false;
-    bridges.br1.interfaces = ["vlan10"];
-    interfaces.br1 = {
-      useDHCP = true;
-    };
-  };
-
-  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
-
-  # Configure network proxy if necessary
-  # networking.proxy.default = "http://user:password@proxy:port/";
-  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
-
-  # Enable networking
-  networking.networkmanager.enable = true;
 
   # Set your time zone.
   time.timeZone = "America/Los_Angeles";
@@ -194,61 +162,6 @@ in
   };
 
   virtualisation.podman.enable=true;
-
-  systemd.services.create-ts-network = {
-    serviceConfig.Type = "oneshot";
-    wantedBy = [ "podman-newt.service" "podman-teamspeak6-server.service" ];
-    script = ''
-      ${pkgs.podman}/bin/podman network exists ts_bridge || \
-      ${pkgs.podman}/bin/podman network create ts_bridge
-    '';
-  };
-
-  virtualisation.oci-containers = {
-    backend="podman";
-    containers ={
-      "teamspeak6-server" = {
-        image = "teamspeaksystems/teamspeak6-server:latest";
-        
-        # Ports: Note the /udp suffix for the voice port
-        ports = [
-          "9987:9987/udp"   # Voice
-          "30033:30033/tcp" # File Transfer
-          #"10080:10080/tcp" #Web Query
-        ];
-
-        # Environment variables
-        environment = {
-          TSSERVER_LICENSE_ACCEPTED = "accept";
-        };
-
-        # Volumes: Mapping a host path to the container path
-        volumes = [
-          "/var/lib/teamspeak:/var/tsserver"
-        ];
-
-        # Equivalent to 'unless-stopped' in the systemd context
-        autoStart = true;
-        extraOptions = ["--network=ts_bridge"];
-      };
-
-      newt = {
-        image = "fosrl/newt:latest";
-        volumes = ["/var/run/podman/podman.sock:/var/run/docker.sock:ro"];
-        environment = {
-          PANGOLIN_ENDPOINT = "https://pangolin.chocomintpie.com";
-          NEWT_ID = "c4ubk9q7ywe2ncf";
-          NEWT_SECRET = "f5kf5up0mg74xj919qmony1djnq2qrkr73fyq3nvsnted9aw";
-        };
-        extraOptions = ["--network=ts_bridge"];
-        dependsOn = ["teamspeak6-server"];
-      };
-    };
-  };
-
-  systemd.tmpfiles.rules = [
-    "d /var/lib/teamspeak 0755 9987 9987 -"
-  ];
 
   # Some programs need SUID wrappers, can be configured further or are
   # started in user sessions.
