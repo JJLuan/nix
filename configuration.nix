@@ -145,8 +145,8 @@ in
     packages = with pkgs; [
       kdePackages.kate
     #  thunderbird
-    ];
-  };
+  ];
+};
 
   # Install firefox.
   programs.firefox.enable = true;
@@ -181,11 +181,11 @@ in
     unzip
     #vim # Do not forget to add an editor to edit configuration.nix! The Nano editor is also installed by default.
   #  wget
-  ];
+];
 
   # Virtualization
   virtualisation.libvirtd = {
-  enable = true;
+    enable = true;
     qemu = {
       package = pkgs.qemu_kvm;
       runAsRoot = true;
@@ -266,30 +266,26 @@ in
   #qemu guest agent
   services.qemuGuest.enable = true;
 
-  #udev automation to hand off z-wave dongle
-  environment.etc."libvirt/hooks/qemu" = {
-    mode = "0755"; # This sets the file as executable (rwxr-xr-x)
-    text = ''
-      #!/run/current-system/sw/bin/bash
-      GUEST_NAME="$1"
-      OPERATION="$2"
-
-      if [ "$GUEST_NAME" == "haos" ] && [ "$OPERATION" == "started" ]; then
-          ${zwaveAttachScript}
-      fi
+  #force a 'replug' of the zwave dongle to clear it from the host
+  systemd.services.zooz-hotplug = {
+  description = "Force Hotplug of Zooz 800 Z-Wave Stick to HAOS";
+  after = [ "libvirtd.service" ];
+  wants = [ "libvirtd.service" ];
+  wantedBy = [ "multi-user.target" ];
+  serviceConfig = {
+    Type = "oneshot";
+    RemainAfterExit = true;
+    # Wait 45 seconds for HAOS to actually start its internal USB bus
+    ExecStartPre = "${pkgs.coreutils}/bin/sleep 45"; 
+    ExecStart = ''
+      ${pkgs.bash}/bin/bash -c " \
+        ${pkgs.libvirt}/bin/virsh detach-device haos ${zwaveXml} --live || true; \
+        ${pkgs.coreutils}/bin/sleep 2; \
+        ${pkgs.libvirt}/bin/virsh attach-device haos ${zwaveXml} --live \
+        "
     '';
   };
-
-  services.udev.extraRules = ''
-    ACTION=="add", SUBSYSTEM=="usb", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55d4", \
-    RUN+="${zwaveAttachScript}"
-  '';
-
-  # Open ports in the firewall.
-  # networking.firewall.allowedTCPPorts = [ ... ];
-  # networking.firewall.allowedUDPPorts = [ ... ];
-  # Or disable the firewall altogether.
-  networking.firewall.enable = false;
+};
 
   system.autoUpgrade.enable = true;
   system.autoUpgrade.allowReboot = true;
