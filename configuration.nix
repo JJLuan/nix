@@ -25,7 +25,7 @@ in
       [ # Include the results of the hardware scan.
       ./hardware-configuration.nix
       ./networking.nix
-      ./teamspeak.nix
+      # ./teamspeak.nix
     ];
 
   # flakes
