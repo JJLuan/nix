@@ -28,6 +28,9 @@ in
       # ./teamspeak.nix
     ];
 
+  #kernel
+  boot.kernelPackages = pkgs.linuxPackages_latest;
+
   # flakes
   nix.settings.experimental-features = ["nix-command" "flakes"];
 
@@ -200,8 +203,14 @@ in
   };
 };
 
-  system.autoUpgrade.enable = true;
-  system.autoUpgrade.allowReboot = true;
+  system.autoUpgrade = {
+    enable = true;
+    allowReboot = true;
+    flags = [
+      "-L" # print build logs
+    ];
+    dates = "04:00";
+  };
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
