@@ -33,6 +33,15 @@
       useDHCP = true;
     };
 
+
+    dhcpcd.extraConfig = ''
+      interface br0
+      metric 100
+
+      interface br1
+      metric 200
+    '';
+
     # Open ports in the firewall.
     # networking.firewall.allowedTCPPorts = [ ... ];
     # networking.firewall.allowedUDPPorts = [ ... ];
